@@ -583,7 +583,10 @@ export async function procesarChecar(
     const diffMin = Math.round(
       (ahora.getTime() - ultimaMarcaHoy.getTime()) / 60000
     );
-    if (diffMin < minEntreMarcas) {
+
+    // Una marca en el futuro (desfase de reloj) no cuenta como registro
+    // previo: no se puede calcular "hace cuánto" con un valor negativo.
+    if (diffMin >= 0 && diffMin < minEntreMarcas) {
       await registrarRechazo({
         usuarioId: usuario.id,
         tokenPrefijo,

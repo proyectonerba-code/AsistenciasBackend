@@ -185,6 +185,18 @@ function instanteMx(fecha: string, hora: number, minuto: number): string {
   ).toISOString();
 }
 
+/**
+ * ¿Esa hora local del día ya pasó? Evita generar marcas "en el futuro"
+ * para el día en curso (el reloj del servidor puede ser anterior).
+ */
+function yaPaso(fecha: string, hora: number, minuto: number): boolean {
+  const partes = fecha.split("-").map(Number);
+  const instante = new Date(
+    Date.UTC(partes[0], partes[1] - 1, partes[2], hora + 6, minuto, 0, 0)
+  );
+  return instante.getTime() <= Date.now();
+}
+
 const NOMBRES = [
   ["Jesus Guadarrama", "jesus.guadarrama@gmail.com", "Oficina", 1042],
   ["Blanca Lopez Castro", "blanca.lopez@gmail.com", "Oficina", 874],
@@ -311,6 +323,10 @@ export function crearDatosDemo(semilla = 20260608): DatosDemo {
         minEntrada = 25 + Math.floor(rnd() * 20);
       }
 
+      // Si la entrada caería en el futuro (hoy todavía no es esa hora),
+      // la persona todavía no ha fichado.
+      if (!yaPaso(fechaStr, horaEntrada, minEntrada)) continue;
+
       marcas.push({
         id: nuevoId(),
         usuario_id: u.id,
@@ -337,6 +353,10 @@ export function crearDatosDemo(semilla = 20260608): DatosDemo {
         horaSalida = 20;
         minSalida = 10 + Math.floor(rnd() * 40);
       }
+
+      // Si la salida caería en el futuro (hoy todavía no es esa hora),
+      // la persona queda con la jornada abierta.
+      if (!yaPaso(fechaStr, horaSalida, minSalida)) continue;
 
       marcas.push({
         id: nuevoId(),
