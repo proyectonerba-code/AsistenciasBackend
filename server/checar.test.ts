@@ -3,9 +3,12 @@ import type { PostgrestSingleResponse } from "@supabase/supabase-js";
 
 const respuestasPorTabla = new Map<string, any>();
 const insertRechazadosMock = vi.fn().mockResolvedValue({ error: null });
+const upsertMock = vi.fn().mockResolvedValue({ error: null });
+const deleteMock = vi.fn().mockResolvedValue({ error: null });
 
 function crearCadena(tabla: string) {
   const data = respuestasPorTabla.get(tabla) ?? [];
+  let modoResolucion: "lista" | "single" | "maybeSingle" = "lista";
   const obj: any = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
@@ -14,8 +17,34 @@ function crearCadena(tabla: string) {
     order: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
     lte: vi.fn().mockReturnThis(),
+    gt: vi.fn().mockReturnThis(),
+    lt: vi.fn().mockReturnThis(),
+    single: vi.fn(() => {
+      modoResolucion = "single";
+      return obj;
+    }),
+    maybeSingle: vi.fn(() => {
+      modoResolucion = "maybeSingle";
+      return obj;
+    }),
     insert: insertRechazadosMock,
-    then: vi.fn((resolve: any) => resolve({ data })),
+    upsert: upsertMock,
+    delete: deleteMock,
+    then: vi.fn((resolve: any) => {
+      if (modoResolucion === "single") {
+        return resolve({
+          data: data.length > 0 ? data[0] : null,
+          error: data.length > 0 ? null : { message: "No se encontró el registro" },
+        });
+      }
+      if (modoResolucion === "maybeSingle") {
+        return resolve({
+          data: data.length > 0 ? data[0] : null,
+          error: null,
+        });
+      }
+      return resolve({ data });
+    }),
   };
   return obj;
 }
@@ -28,7 +57,7 @@ vi.mock("../lib/supabase/server", () => ({
 }));
 
 import { supabaseAdmin } from "../lib/supabase/server";
-import { procesarChecar } from "./checar";
+import { procesarChecar, resetConfigCache } from "./checar";
 import { sha256Hex } from "../lib/crypto";
 
 const mockFrom = vi.mocked(supabaseAdmin.from);
@@ -49,10 +78,14 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.restoreAllMocks();
   insertRechazadosMock.mockReset();
+  upsertMock.mockReset();
+  deleteMock.mockReset();
   mockFrom.mockReset();
   mockRpc.mockReset();
   mockFrom.mockImplementation((tabla: string) => crearCadena(tabla));
   respuestasPorTabla.clear();
+  // La caché de config vive a nivel de módulo: hay que limpiarla entre tests.
+  resetConfigCache();
 });
 
 function configurar(tabla: string, data: any[]) {

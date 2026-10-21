@@ -58,6 +58,42 @@ function cfgHora(map: ConfigMap, clave: string, def: string): string {
   return def;
 }
 
+/* ------------------------------------------------------------------ */
+/* Caché de configuración                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * La tabla `config` se lee en cada checada. Con una caché corta se evita
+ * un hit a Supabase por request sin sacrificar frescura: la configuración
+ * cambia muy pocas veces y el TTL es de 60 s.
+ */
+const CONFIG_TTL_MS = 60_000;
+let configCache: { data: ConfigMap; expires: number } | null = null;
+
+async function obtenerConfig(): Promise<ConfigMap> {
+  const ahora = Date.now();
+  if (configCache && configCache.expires > ahora) {
+    return configCache.data;
+  }
+
+  const { data: configRows } = await supabaseAdmin
+    .from("config")
+    .select("clave, valor");
+
+  const config: ConfigMap = {};
+  for (const row of configRows ?? []) {
+    config[row.clave] = row.valor;
+  }
+
+  configCache = { data: config, expires: ahora + CONFIG_TTL_MS };
+  return config;
+}
+
+/** Vacía la caché de configuración. Se usa en tests y tras editar la config. */
+export function resetConfigCache(): void {
+  configCache = null;
+}
+
 export type MotivoRechazo =
   | "token invalido"
   | "usuario inactivo"
@@ -129,10 +165,9 @@ async function registrarRechazo(params: {
 }
 
 /* ------------------------------------------------------------------ */
-/* Avisos al administrador (opcionales, con deduplicación)            */
+/* Avisos al administrador (opcionales, con deduplicación persistente) */
 /* ------------------------------------------------------------------ */
 
-const ultimosAvisos = new Map<string, number>();
 const AVISO_INTERVALO_MS = 60 * 1000;
 
 async function enviarAvisoAdmin(
@@ -140,15 +175,30 @@ async function enviarAvisoAdmin(
   asunto: string,
   cuerpo: string
 ): Promise<void> {
-  const ahora = Date.now();
-  const previo = ultimosAvisos.get(clave);
-  if (previo && ahora - previo < AVISO_INTERVALO_MS) return;
-  ultimosAvisos.set(clave, ahora);
+  const ahora = new Date();
 
-  if (ultimosAvisos.size > 50) {
-    ultimosAvisos.forEach((v, k) => {
-      if (ahora - v > AVISO_INTERVALO_MS * 3) ultimosAvisos.delete(k);
-    });
+  // Deduplicación persistente en BD (funciona en serverless)
+  const { data: existente } = await supabaseAdmin
+    .from("avisos_admin")
+    .select("ultima_envio")
+    .eq("clave", clave)
+    .maybeSingle();
+
+  if (existente) {
+    const diffMs = ahora.getTime() - new Date(existente.ultima_envio).getTime();
+    if (diffMs < AVISO_INTERVALO_MS) return;
+  }
+
+  // Upsert: actualiza timestamp o inserta nuevo
+  await supabaseAdmin.from("avisos_admin").upsert({
+    clave,
+    ultima_envio: ahora.toISOString(),
+  });
+
+  // Limpieza ocasional de avisos antiguos (> 3 intervalos)
+  if (Math.random() < 0.01) {
+    const corte = new Date(ahora.getTime() - AVISO_INTERVALO_MS * 3).toISOString();
+    await supabaseAdmin.from("avisos_admin").delete().lt("ultima_envio", corte);
   }
 
   const adminEmail = process.env.ADMIN_ALERT_EMAIL;
@@ -314,15 +364,9 @@ export async function procesarChecar(
   }
 
   /* ---------------------------------------------------------------- */
-  /* Configuración del sistema                                         */
+  /* Configuración del sistema (con caché simple 60s)                 */
   /* ---------------------------------------------------------------- */
-  const { data: configRows } = await supabaseAdmin
-    .from("config")
-    .select("clave, valor");
-  const config: ConfigMap = {};
-  for (const row of configRows ?? []) {
-    config[row.clave] = row.valor;
-  }
+  const config = await obtenerConfig();
 
   const horaMin = cfgHora(config, "hora_min_registro", HORA_MIN_DEFAULT);
   const horaMax = cfgHora(config, "hora_max_registro", HORA_MAX_DEFAULT);
@@ -556,28 +600,32 @@ export async function procesarChecar(
   /* Anti doble registro + marca adicional                            */
   /* ---------------------------------------------------------------- */
   const hoy = fechaLocal(ahora);
+  const inicioHoy = inicioDiaMx(hoy);
+  const manana = new Date(inicioHoy.getTime() + 24 * 60 * 60 * 1000);
 
-  // Una sola consulta trae las marcas más recientes de la persona.
-  // Como el máximo es de 2 marcas por día (entrada + salida), 5 registros
-  // alcanzan para saber cuántas hay hoy y si quedó una entrada abierta
-  // de un día anterior.
-  const { data: marcasRecientes } = await supabaseAdmin
+  // Marcas de hoy (para anti-doble-registro y marca adicional)
+  const { data: marcasHoyData } = await supabaseAdmin
     .from("marcas")
     .select("ts")
     .eq("usuario_id", usuario.id)
-    .order("ts", { ascending: false })
-    .limit(5);
+    .gte("ts", inicioHoy.toISOString())
+    .lt("ts", manana.toISOString())
+    .order("ts", { ascending: true });
 
-  const marcasHoy = (marcasRecientes ?? []).filter(
-    (m) => fechaLocal(m.ts) === hoy
-  );
-  const marcasPrevias = (marcasRecientes ?? []).filter(
-    (m) => fechaLocal(m.ts) !== hoy
-  );
-
-  const ultimaMarcaHoy = marcasHoy[0]?.ts
-    ? new Date(marcasHoy[0].ts)
+  const marcasHoy = marcasHoyData ?? [];
+  const ultimaMarcaHoy = marcasHoy[marcasHoy.length - 1]?.ts
+    ? new Date(marcasHoy[marcasHoy.length - 1].ts)
     : null;
+
+  // Detectar entrada abierta de día anterior (última marca de día previo que sea ENTRADA sin salida)
+  // Buscamos la última marca ANTES de hoy
+  const { data: ultimaMarcaPrevia } = await supabaseAdmin
+    .from("marcas")
+    .select("ts")
+    .eq("usuario_id", usuario.id)
+    .lt("ts", inicioHoy.toISOString())
+    .order("ts", { ascending: false })
+    .limit(1);
 
   if (ultimaMarcaHoy) {
     const diffMin = Math.round(
@@ -692,7 +740,7 @@ export async function procesarChecar(
 
   // Aviso informativo si quedó una entrada abierta de otro día.
   let aviso: string | null = null;
-  const previa = marcasPrevias[0];
+  const previa = ultimaMarcaPrevia?.[0];
 
   if (previa?.ts && fila.tipo === "ENTRADA") {
     const prev = new Date(previa.ts);
