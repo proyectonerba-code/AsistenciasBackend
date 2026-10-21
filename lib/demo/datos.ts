@@ -99,6 +99,11 @@ export interface AdminDemo {
   creado_en: string;
 }
 
+export interface AvisoAdminDemo {
+  clave: string;
+  ultima_envio: string;
+}
+
 export interface DatosDemo {
   usuarios: UsuarioDemo[];
   sedes: SedeDemo[];
@@ -108,6 +113,7 @@ export interface DatosDemo {
   horarios_especiales: HorarioEspecialDemo[];
   rechazados: RechazadoDemo[];
   admins: AdminDemo[];
+  avisos_admin: AvisoAdminDemo[];
   config: { clave: string; valor: unknown; descripcion: string | null }[];
 }
 
@@ -529,6 +535,9 @@ export function crearDatosDemo(semilla = 20260608): DatosDemo {
     { correo: "marionly420@gmail.com", rol: "admin", creado_en: hoy.toISOString() },
   ];
 
+  // Control de deduplicacion de avisos al admin (vacio en demo).
+  const avisosAdmin: AvisoAdminDemo[] = [];
+
   return {
     usuarios,
     sedes,
@@ -538,6 +547,7 @@ export function crearDatosDemo(semilla = 20260608): DatosDemo {
     horarios_especiales: horariosEspeciales,
     rechazados,
     admins,
+    avisos_admin: avisosAdmin,
     config,
   };
 }
@@ -547,5 +557,7 @@ export const PASSWORD_DEMO = "demo1234";
 
 /** ¿El modo demo está activo? */
 export function esDemoActivo(): boolean {
-  return process.env.SUPABASE_DEMO === "1";
+  // Se recorta: las variables de entorno pueden traer espacios sobrantes
+  // según de dónde venga el valor (archivo .env, panel de Vercel, etc.).
+  return process.env.SUPABASE_DEMO?.trim() === "1";
 }

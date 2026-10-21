@@ -177,28 +177,38 @@ async function enviarAvisoAdmin(
 ): Promise<void> {
   const ahora = new Date();
 
-  // Deduplicación persistente en BD (funciona en serverless)
-  const { data: existente } = await supabaseAdmin
-    .from("avisos_admin")
-    .select("ultima_envio")
-    .eq("clave", clave)
-    .maybeSingle();
+  // La deduplicación vive en la BD para que sobreviva a los cold starts de
+  // Vercel (un Map en memoria se pierde entre invocaciones).
+  try {
+    const { data: existente } = await supabaseAdmin
+      .from("avisos_admin")
+      .select("ultima_envio")
+      .eq("clave", clave)
+      .maybeSingle();
 
-  if (existente) {
-    const diffMs = ahora.getTime() - new Date(existente.ultima_envio).getTime();
-    if (diffMs < AVISO_INTERVALO_MS) return;
-  }
+    if (existente) {
+      const diffMs = ahora.getTime() - new Date(existente.ultima_envio).getTime();
+      if (diffMs < AVISO_INTERVALO_MS) return;
+    }
 
-  // Upsert: actualiza timestamp o inserta nuevo
-  await supabaseAdmin.from("avisos_admin").upsert({
-    clave,
-    ultima_envio: ahora.toISOString(),
-  });
+    await supabaseAdmin
+      .from("avisos_admin")
+      .upsert(
+        { clave, ultima_envio: ahora.toISOString() },
+        { onConflict: "clave" }
+      );
 
-  // Limpieza ocasional de avisos antiguos (> 3 intervalos)
-  if (Math.random() < 0.01) {
-    const corte = new Date(ahora.getTime() - AVISO_INTERVALO_MS * 3).toISOString();
-    await supabaseAdmin.from("avisos_admin").delete().lt("ultima_envio", corte);
+    // Limpieza ocasional de avisos antiguos (> 3 intervalos).
+    if (Math.random() < 0.01) {
+      const corte = new Date(
+        ahora.getTime() - AVISO_INTERVALO_MS * 3
+      ).toISOString();
+      await supabaseAdmin.from("avisos_admin").delete().lt("ultima_envio", corte);
+    }
+  } catch (err) {
+    // La deduplicacion es best-effort: si la tabla no existe todavia, el
+    // aviso al administrador se envia igual. Nunca debe romper la checada.
+    console.error("No se pudo registrar la deduplicacion del aviso:", err);
   }
 
   const adminEmail = process.env.ADMIN_ALERT_EMAIL;

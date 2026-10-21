@@ -29,6 +29,7 @@ interface TablasDemo {
   rechazados: Fila[];
   bitacora: Fila[];
   admins: Fila[];
+  avisos_admin: Fila[];
 }
 
 export interface ResultadoDemo<T> {
@@ -94,6 +95,7 @@ export function crearSupabaseDemo(datos: {
   horarios_especiales?: object[];
   rechazados?: object[];
   bitacora?: object[];
+  avisos_admin?: object[];
 }): { cliente: unknown; tablas: TablasDemo } {
   const aFilas = (filas: object[]): Fila[] => filas.map((f) => ({ ...f }));
 
@@ -108,6 +110,7 @@ export function crearSupabaseDemo(datos: {
     rechazados: aFilas(datos.rechazados ?? []),
     bitacora: aFilas(datos.bitacora ?? []),
     admins: aFilas(datos.admins),
+    avisos_admin: aFilas(datos.avisos_admin ?? []),
   };
 
   let contador = 0;
@@ -127,6 +130,7 @@ export function crearSupabaseDemo(datos: {
     let limite: number | null = null;
     let orden: { col: string; asc: boolean } | null = null;
     let single = false;
+    let maybeSingle = false;
     let datosInsert: Fila[] = [];
     let claveConflicto: string[] = [];
     let soloCabecera = false;
@@ -190,10 +194,12 @@ export function crearSupabaseDemo(datos: {
     };
     builder.single = () => {
       single = true;
+      maybeSingle = false;
       return builder;
     };
     builder.maybeSingle = () => {
       single = true;
+      maybeSingle = true;
       return builder;
     };
     builder.insert = (vals: Fila | Fila[]) => {
@@ -208,6 +214,11 @@ export function crearSupabaseDemo(datos: {
         .split(",")
         .map((c) => c.trim())
         .filter((c) => c.length > 0);
+      // PostgREST usa la primary key cuando no se indica on_conflict.
+      // En el demo, la primary key se deduce de la propia fila.
+      if (claveConflicto.length === 0 && datosInsert[0]) {
+        claveConflicto = "clave" in datosInsert[0] ? ["clave"] : ["id"];
+      }
       return builder;
     };
     builder.delete = () => {
@@ -261,7 +272,11 @@ export function crearSupabaseDemo(datos: {
         if (single) {
           return resolve({
             data: out.length > 0 ? out[0] : null,
-            error: out.length > 0 ? null : { message: "No se encontró el registro" },
+            // maybeSingle no es error cuando no hay coincidencias.
+            error:
+              out.length > 0 || maybeSingle
+                ? null
+                : { message: "No se encontró el registro" },
           });
         }
         return resolve({ data: out, error: null });
