@@ -184,9 +184,9 @@ const CONSULTAS_VERIFICACION = [
           WHERE table_schema = 'public'
             AND table_name IN ('usuarios','sedes','marcas','ajustes_manuales',
                                'horarios_especiales','faltas','rechazados','bitacora',
-                               'admins','config')
+                               'admins','config','avisos_admin')
           ORDER BY table_name;`,
-    esperado: 10,
+    esperado: 11,
   },
   {
     nombre: "Función registrar_marca",
@@ -248,12 +248,12 @@ async function verificar() {
        WHERE schemaname = 'public' AND rowsecurity = true
          AND tablename IN ('usuarios','sedes','marcas','ajustes_manuales',
                            'horarios_especiales','faltas','rechazados','bitacora',
-                           'admins','config');`
+                           'admins','config','avisos_admin');`
     );
     const n = filas?.[0]?.n ?? 0;
-    const bien = n === 10;
+    const bien = n === 11;
     ok = ok && bien;
-    log(`${bien ? "✔" : "✖"} RLS activo en las 10 tablas: ${n}`);
+    log(`${bien ? "✔" : "✖"} RLS activo en las 11 tablas: ${n}`);
   } catch (err) {
     log(`✖ RLS: ${err.message}`);
   }
@@ -293,6 +293,7 @@ async function main() {
     log("\n⚠  BORRANDO las tablas del sistema…");
     const tablas = [
       "bitacora",
+      "avisos_admin",
       "rechazados",
       "faltas",
       "horarios_especiales",

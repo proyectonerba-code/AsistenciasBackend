@@ -105,16 +105,64 @@ export function fechaCorta(fecha: Date | string): string {
 /* Límites del día (instantes UTC que corresponden al día local)      */
 /* ------------------------------------------------------------------ */
 
-/** Instante UTC que corresponde a las 00:00:00 del día local indicado. */
+/**
+ * Desfase de la zona horaria, en minutos, en el instante dado.
+ * Positivo si la zona local va por detrás de UTC (México: -360).
+ */
+function desfaseZonaMinutos(fecha: Date): number {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+    .formatToParts(fecha)
+    .reduce<Record<string, string>>((acc, p) => {
+      acc[p.type] = p.value;
+      return acc;
+    }, {});
+
+  const localComoUtc = Date.UTC(
+    Number(partes.year),
+    Number(partes.month) - 1,
+    Number(partes.day),
+    Number(partes.hour) % 24,
+    Number(partes.minute),
+    Number(partes.second)
+  );
+
+  return Math.round((localComoUtc - fecha.getTime()) / 60000);
+}
+
+/**
+ * Instante UTC que corresponde a las 00:00:00 del día local indicado.
+ *
+ * OJO: el día en México empieza a las 06:00 UTC, no a las 00:00 UTC.
+ * Usar la medianoche UTC dejaría fuera (o dentro) las marcas de las
+ * primeras o últimas 6 horas del día.
+ */
 export function inicioDiaMx(fecha: Date | string): Date {
   const partes = fechaLocal(fecha).split("-").map(Number);
-  return new Date(Date.UTC(partes[0], partes[1] - 1, partes[2], 0, 0, 0, 0));
+  const medianocheLocal = Date.UTC(partes[0], partes[1] - 1, partes[2], 0, 0, 0, 0);
+
+  // Dos pasadas: la primera estima el desfase, la segunda lo corrige
+  // (por ejemplo cuando el horario de verano cambia justo ese día).
+  let instante = medianocheLocal;
+  for (let i = 0; i < 2; i++) {
+    const desfase = desfaseZonaMinutos(new Date(instante));
+    instante = medianocheLocal - desfase * 60000;
+  }
+
+  return new Date(instante);
 }
 
 /** Instante UTC que corresponde a las 23:59:59.999 del día local indicado. */
 export function finDiaMx(fecha: Date | string): Date {
-  const partes = fechaLocal(fecha).split("-").map(Number);
-  return new Date(Date.UTC(partes[0], partes[1] - 1, partes[2], 23, 59, 59, 999));
+  return new Date(inicioDiaMx(fecha).getTime() + 24 * 60 * 60 * 1000 - 1);
 }
 
 /* ------------------------------------------------------------------ */
