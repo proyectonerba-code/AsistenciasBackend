@@ -31,6 +31,10 @@ const soloVerificar = args.includes("--verificar");
 const dryRun = args.includes("--dry-run");
 const reset = args.includes("--reset");
 
+/** --solo 0003_seed.sql  (o un fragmento del nombre) */
+const idxSolo = args.indexOf("--solo");
+const solo = idxSolo !== -1 ? args[idxSolo + 1] : null;
+
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
 const REF = process.env.SUPABASE_PROJECT_REF;
 
@@ -311,11 +315,16 @@ async function main() {
   const archivos = existsSync(MIGRATIONS_DIR)
     ? readdirSync(MIGRATIONS_DIR)
         .filter((f) => f.endsWith(".sql"))
+        .filter((f) => !solo || f.includes(solo))
         .sort()
     : [];
 
   if (archivos.length === 0) {
-    fail("No se encontraron migraciones en supabase/migrations/.");
+    fail(
+      solo
+        ? `No se encontró ninguna migración que coincida con "${solo}".`
+        : "No se encontraron migraciones en supabase/migrations/."
+    );
   }
 
   log(`\nMigraciones: ${archivos.join(", ")}\n`);

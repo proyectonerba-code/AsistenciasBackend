@@ -7,10 +7,13 @@
 
 -- ------------------------------------------------------------
 -- Sedes (geocercas). Ajusta coordenadas y radio a tu oficina real.
+-- El WHERE NOT EXISTS lo hace idempotente: se puede re-aplicar sin duplicar.
 -- ------------------------------------------------------------
-INSERT INTO sedes (nombre, lat, lng, radio_m, activa) VALUES
-  ('Oficina Central', 19.432608, -99.133209, 100, true)
-ON CONFLICT DO NOTHING;
+INSERT INTO sedes (nombre, lat, lng, radio_m, activa)
+SELECT 'Oficina Central', 19.432608, -99.133209, 100, true
+WHERE NOT EXISTS (
+  SELECT 1 FROM sedes WHERE nombre = 'Oficina Central'
+);
 
 -- ------------------------------------------------------------
 -- Configuración del sistema
@@ -20,14 +23,14 @@ INSERT INTO config (clave, valor, descripcion) VALUES
    'Horario de referencia por área. Se usa cuando no hay horario especial ni sábado.'),
   ('horario_sabado', '{"inicio":"09:00","fin":"15:00"}'::jsonb,
    'Horario general de sábados (sin descuento de comida).'),
-  ('minutos_comida_default', 60::jsonb, 'Minutos de comida por defecto por usuario.'),
-  ('minutos_minimos_para_comida', 300::jsonb, 'Jornada bruta mínima para descontar comida (no aplica sábado).'),
-  ('minutos_entre_marcas', 5::jsonb, 'Minutos mínimos entre marcas para considerar salida (anti doble registro).'),
+  ('minutos_comida_default', '60'::jsonb, 'Minutos de comida por defecto por usuario.'),
+  ('minutos_minimos_para_comida', '300'::jsonb, 'Jornada bruta mínima para descontar comida (no aplica sábado).'),
+  ('minutos_entre_marcas', '5'::jsonb, 'Minutos mínimos entre marcas para considerar salida (anti doble registro).'),
   ('hora_min_registro', '"06:00"'::jsonb, 'Hora mínima permitida para registrar (zona México).'),
   ('hora_max_registro', '"23:30"'::jsonb, 'Hora máxima permitida para registrar (zona México).'),
-  ('trasladar_extra_sabado', true::jsonb, '¿Las horas extra del sábado se suman a la semana siguiente?'),
-  ('radio_geocerca_default_m', 100::jsonb, 'Radio default de geocerca en metros.'),
-  ('precision_max_m', 50::jsonb, 'Precisión máxima del GPS aceptada (metros).')
+  ('trasladar_extra_sabado', 'true'::jsonb, '¿Las horas extra del sábado se suman a la semana siguiente?'),
+  ('radio_geocerca_default_m', '100'::jsonb, 'Radio default de geocerca en metros.'),
+  ('precision_max_m', '50'::jsonb, 'Precisión máxima del GPS aceptada (metros).')
 ON CONFLICT (clave) DO NOTHING;
 
 -- ------------------------------------------------------------
@@ -56,6 +59,7 @@ ON CONFLICT (correo) DO NOTHING;
 -- ------------------------------------------------------------
 -- Horario especial de Blanca: 08:30 - 19:00 de lunes a viernes.
 -- Ejemplo de "horarios especiales por persona y día".
+-- El WHERE NOT EXISTS lo hace idempotente: se puede re-aplicar sin duplicar.
 -- ------------------------------------------------------------
 INSERT INTO horarios_especiales
   (usuario_id, dia_semana, entrada, salida, vigente_desde, vigente_hasta, activo)
@@ -63,7 +67,14 @@ SELECT u.id, d.dia, '08:30'::time, '19:00'::time, DATE '2024-01-01', NULL, true
 FROM usuarios u
 CROSS JOIN (VALUES (1),(2),(3),(4),(5)) AS d(dia)
 WHERE u.correo = 'blanca.lopez@gmail.com'
-ON CONFLICT DO NOTHING;
+  AND NOT EXISTS (
+    SELECT 1
+    FROM horarios_especiales h
+    WHERE h.usuario_id = u.id
+      AND h.dia_semana = d.dia
+      AND h.entrada = '08:30'::time
+      AND h.salida = '19:00'::time
+  );
 
 -- ------------------------------------------------------------
 -- Administradores del panel.

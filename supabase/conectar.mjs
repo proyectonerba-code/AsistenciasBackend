@@ -164,31 +164,86 @@ async function descubrirProyecto() {
 /* 2. Obtener las llaves                                               */
 /* ------------------------------------------------------------------ */
 
-async function obtenerLlaves(ref) {
+/** La llave de servicio sirve para la API de administración de Auth. */
+async function probarServiceRole(url, key) {
+  try {
+    const res = await fetch(`${url}/auth/v1/admin/users?per_page=1`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** La llave anónima debe poder hablar con PostgREST (aunque RLS no le deje leer). */
+async function probarAnon(url, key) {
+  try {
+    const res = await fetch(`${url}/rest/v1/usuarios?select=id&limit=1`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Elige la llave de entre las candidatas, comprobando contra la API.
+ *
+ * Un proyecto puede tener varias llaves de cada tipo (las clásicas JWT y las
+ * nuevas sb_secret_ / sb_publishable_), y alguna puede estar en mal estado.
+ * En vez de adivinar, se prueban y se usa la primera que responde bien.
+ */
+async function obtenerLlaves(ref, url) {
   const crudos = await mg(`/v1/projects/${ref}/api-keys`);
+  const lista = (Array.isArray(crudos) ? crudos : [crudos]).filter(
+    (k) => k && typeof k === "object"
+  );
 
-  let anon = null;
+  const valor = (k) => k.api_key || k.key || k.value || null;
+  const nombre = (k) => String(k.name || k.id || "").toLowerCase();
+
+  // Candidatas de servicio, en orden de preferencia.
+  const candidatasService = [
+    ...lista.filter((k) => nombre(k) === "service_role"),
+    ...lista.filter((k) => k.type === "secret"),
+    ...lista.filter(
+      (k) => k.type !== "publishable" && !nombre(k).includes("anon")
+    ),
+  ].map(valor).filter(Boolean);
+
+  // Candidatas públicas, en orden de preferencia.
+  const candidatasAnon = [
+    ...lista.filter((k) => nombre(k) === "anon"),
+    ...lista.filter((k) => k.type === "publishable"),
+  ].map(valor).filter(Boolean);
+
   let service = null;
-
-  const lista = Array.isArray(crudos) ? crudos : [crudos];
-
-  for (const k of lista) {
-    if (!k || typeof k !== "object") continue;
-    const tipo = String(k.type || k.name || "").toLowerCase();
-    const valor = k.api_key || k.key || k.value;
-    if (!valor) continue;
-    if (tipo.includes("service") || tipo.includes("secret")) service = valor;
-    else if (tipo.includes("anon") || tipo.includes("publishable")) anon = valor;
+  for (const key of candidatasService) {
+    if (await probarServiceRole(url, key)) {
+      service = key;
+      break;
+    }
+  }
+  if (!service) {
+    fallar(
+      "Ninguna llave de servicio del proyecto responde en la API de Auth.",
+      `Probadas: ${candidatasService.length}. Revisa en Project Settings > API > Keys.`
+    );
   }
 
-  // Formato antiguo: { anon_key, service_role_key, jwt_secret }
-  if (!anon && crudos?.anon_key) anon = crudos.anon_key;
-  if (!service && crudos?.service_role_key) service = crudos.service_role_key;
-
-  if (!anon || !service) {
-    fallar(
-      "No pude obtener las llaves del proyecto.",
-      `Respuesta recibida: ${JSON.stringify(crudos).slice(0, 400)}`
+  let anon = null;
+  for (const key of candidatasAnon) {
+    if (await probarAnon(url, key)) {
+      anon = key;
+      break;
+    }
+  }
+  if (!anon) {
+    failar(
+      "Ninguna llave pública del proyecto responde en PostgREST.",
+      `Probadas: ${candidatasAnon.length}.`
     );
   }
 
@@ -326,11 +381,11 @@ async function main() {
   const proyecto = await descubrirProyecto();
   ok(`${proyecto.name} (ref: ${proyecto.ref}, ${proyecto.region})`);
 
-  paso("2/5  Obteniendo las llaves del proyecto");
-  const { anon, service } = await obtenerLlaves(proyecto.ref);
-  ok("service_role y anon key obtenidas");
-
   const url = `https://${proyecto.ref}.supabase.co`;
+
+  paso("2/5  Obteniendo las llaves del proyecto");
+  const { anon, service } = await obtenerLlaves(proyecto.ref, url);
+  ok("service_role y anon key obtenidas (validadas contra la API)");
 
   paso("3/5  Aplicando migraciones");
   if (SIN_MIGRAR) {

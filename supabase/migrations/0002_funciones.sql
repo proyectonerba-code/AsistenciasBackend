@@ -50,14 +50,17 @@ BEGIN
 
   v_hoy := (now() AT TIME ZONE 'America/Mexico_City')::date;
 
+  -- OJO: el parámetro de salida se llama "ts" y la tabla marcas también tiene
+  -- una columna "ts". Por eso todas las referencias a la columna van
+  -- cualificadas como marcas.ts; si no, Postgres las marca como ambiguas.
   SELECT count(*) INTO v_count_hoy
   FROM marcas
-  WHERE usuario_id = p_usuario_id
-    AND (ts AT TIME ZONE 'America/Mexico_City')::date = v_hoy;
+  WHERE marcas.usuario_id = p_usuario_id
+    AND (marcas.ts AT TIME ZONE 'America/Mexico_City')::date = v_hoy;
 
-  SELECT max(ts) INTO v_ultimo_ts
+  SELECT max(marcas.ts) INTO v_ultimo_ts
   FROM marcas
-  WHERE usuario_id = p_usuario_id;
+  WHERE marcas.usuario_id = p_usuario_id;
 
   IF v_ultimo_ts IS NULL THEN
     v_tipo := 'ENTRADA';
