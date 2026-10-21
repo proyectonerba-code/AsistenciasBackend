@@ -1,0 +1,29 @@
+{
+  "name": "asistencias-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend del Control de Asistencia: API /api/checar, migraciones SQL, motor de tz, haversine, rate-limit, cliente Supabase service role.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@supabase/supabase-js": "^2.45.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5",
+    "jsdom": "^24.1.0"
+  }
+}
