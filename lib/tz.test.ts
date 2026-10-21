@@ -8,6 +8,8 @@ import {
   esDiaLaboralMx,
   minutosAHHMM,
   hhmmAMinutos,
+  inicioDiaMx,
+  finDiaMx,
 } from "./tz";
 
 describe("tz — zona horaria fija America/Mexico_City", () => {
@@ -53,5 +55,32 @@ describe("tz — zona horaria fija America/Mexico_City", () => {
     const d = ahoraMx();
     expect(d instanceof Date).toBe(true);
     expect(!isNaN(d.getTime())).toBe(true);
+  });
+
+  it("el día en México empieza a las 06:00 UTC, no a las 00:00 UTC", () => {
+    // 2026-06-15 00:00 en México = 2026-06-15 06:00 UTC.
+    expect(inicioDiaMx("2026-06-15").toISOString()).toBe(
+      "2026-06-15T06:00:00.000Z"
+    );
+  });
+
+  it("el día en México termina a las 23:59:59 local del mismo día", () => {
+    // 2026-06-16 05:59:59.999 UTC = 2026-06-15 23:59:59.999 en México.
+    expect(finDiaMx("2026-06-15").toISOString()).toBe(
+      "2026-06-16T05:59:59.999Z"
+    );
+  });
+
+  it("una marca a las 22:00 local cae dentro de ese día", () => {
+    // 2026-06-16 04:00 UTC = 2026-06-15 22:00 en México.
+    const marca = new Date("2026-06-16T04:00:00.000Z");
+    expect(marca.getTime()).toBeGreaterThanOrEqual(inicioDiaMx("2026-06-15").getTime());
+    expect(marca.getTime()).toBeLessThanOrEqual(finDiaMx("2026-06-15").getTime());
+  });
+
+  it("una marca a las 02:00 local NO cae dentro de ese día", () => {
+    // 2026-06-16 08:00 UTC = 2026-06-16 02:00 en México.
+    const marca = new Date("2026-06-16T08:00:00.000Z");
+    expect(marca.getTime()).toBeGreaterThan(finDiaMx("2026-06-15").getTime());
   });
 });
