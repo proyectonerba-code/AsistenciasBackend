@@ -95,7 +95,26 @@ cp .env.example .env.local
 
 ### 3. Base de datos
 
-Ejecuta las migraciones en Supabase (SQL Editor) **en este orden**:
+**Opción A — automática (recomendada).** Genera un *Personal Access Token* en
+<https://supabase.com/dashboard/account/tokens> con el alcance `exec_sql` y ejecuta:
+
+```bash
+$env:SUPABASE_ACCESS_TOKEN="sbp_..."      # tu token personal
+$env:SUPABASE_PROJECT_REF="abcdexyz"     # lo que va en ....supabase.co
+npm run migraciones
+```
+
+Aplica `0001_init.sql`, `0002_funciones.sql` y `0003_seed.sql` en orden, y al
+final verifica que existan las 10 tablas, la función `registrar_marca()`, el RLS
+y los datos iniciales.
+
+```bash
+npm run migraciones:verificar   # solo comprueba, no escribe
+npm run migraciones:reset       # borra y vuelve a aplicar (pide confirmación)
+```
+
+**Opción B — manual.** Pega los tres archivos, en orden, en
+*Supabase → SQL Editor → New query*:
 
 ```
 supabase/migrations/0001_init.sql      -- tablas, índices, RLS
@@ -104,6 +123,7 @@ supabase/migrations/0003_seed.sql      -- sedes, config, usuarios y admins inici
 ```
 
 > Ajusta las coordenadas de `sedes` en `0003_seed.sql` a la dirección real de la oficina.
+> Los tokens del seed son de ejemplo: roótalos desde *Empleados → Regenerar token*.
 
 ### 4. Desarrollo
 

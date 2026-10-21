@@ -9,7 +9,10 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "migraciones": "node supabase/aplicar-migraciones.mjs",
+    "migraciones:verificar": "node supabase/aplicar-migraciones.mjs --verificar",
+    "migraciones:reset": "node supabase/aplicar-migraciones.mjs --reset"
   },
   "dependencies": {
     "next": "14.2.15",
