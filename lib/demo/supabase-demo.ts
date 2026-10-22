@@ -16,7 +16,8 @@ type Filtro =
   | { op: "gte"; col: string; val: unknown }
   | { op: "lte"; col: string; val: unknown }
   | { op: "gt"; col: string; val: unknown }
-  | { op: "lt"; col: string; val: unknown };
+  | { op: "lt"; col: string; val: unknown }
+  | { op: "in"; col: string; val: unknown[] };
 
 interface TablasDemo {
   usuarios: Fila[];
@@ -76,6 +77,10 @@ function cumple(fila: Fila, filtros: Filtro[]): boolean {
         if (valor === null || valor === undefined) return false;
         if (comparar(valor, f.val) >= 0) return false;
         break;
+      case "in":
+        if (!Array.isArray(f.val)) return false;
+        if (!f.val.some((v) => String(v) === String(valor))) return false;
+        break;
     }
   }
   return true;
@@ -126,7 +131,7 @@ export function crearSupabaseDemo(datos: {
     }
 
     const filtros: Filtro[] = [];
-    let modo: "select" | "insert" | "upsert" | "delete" = "select";
+    let modo: "select" | "insert" | "upsert" | "update" | "delete" = "select";
     let limite: number | null = null;
     let orden: { col: string; asc: boolean } | null = null;
     let single = false;
@@ -184,6 +189,10 @@ export function crearSupabaseDemo(datos: {
       filtros.push({ op: "lt", col, val });
       return builder;
     };
+    builder.in = (col: string, valores: unknown[]) => {
+      filtros.push({ op: "in", col, val: valores });
+      return builder;
+    };
     builder.order = (col: string, opts?: { ascending?: boolean }) => {
       orden = { col, asc: opts?.ascending !== false };
       return builder;
@@ -221,6 +230,11 @@ export function crearSupabaseDemo(datos: {
       }
       return builder;
     };
+    builder.update = (vals: Fila) => {
+      modo = "update";
+      datosInsert = [vals];
+      return builder;
+    };
     builder.delete = () => {
       modo = "delete";
       return builder;
@@ -232,6 +246,7 @@ export function crearSupabaseDemo(datos: {
     ): unknown => {
       try {
         if (modo === "insert" || modo === "upsert") {
+          let insertada: Fila | null = null;
           for (const val of datosInsert) {
             const fila: Fila = { ...val };
             if (!fila.id) fila.id = nuevoUuid();
@@ -243,12 +258,28 @@ export function crearSupabaseDemo(datos: {
               );
               if (existente) {
                 Object.assign(existente, fila);
+                insertada = existente;
                 continue;
               }
             }
             filas.push(fila);
+            insertada = fila;
+          }
+          // El codigo real encadena .insert(...).select(...).single(): en
+          // ese caso hay que devolver la fila recien insertada.
+          if (single && insertada) {
+            return resolve({ data: insertada, error: null });
           }
           return resolve({ data: null, error: null });
+        }
+
+        if (modo === "update") {
+          // Se aplica y se sigue el flujo: el codigo real encadena
+          // .update(...).eq(...).select(...).single() y espera la fila.
+          const victims = filtrar();
+          for (const v of victims) {
+            Object.assign(v, datosInsert[0] ?? {});
+          }
         }
 
         if (modo === "delete") {
