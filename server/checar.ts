@@ -27,6 +27,7 @@ import {
   minutosAHHMM,
 } from "../lib/tz";
 import { verificarRateLimit } from "../lib/rate-limit";
+import { verificarSesion } from "./sesion";
 import { ChecarSchema, type ChecarInput } from "./validations";
 
 const HORA_MIN_DEFAULT = "06:00";
@@ -334,8 +335,30 @@ export async function procesarChecar(
     };
   }
 
-  const { token, lat, lng, accuracy } = validacion.data;
-  const tokenPrefijo = prefijoToken(token);
+  const { token, sesion, lat, lng, accuracy, dispositivo, etiqueta } =
+    validacion.data;
+
+  if (!token && !sesion && !dispositivo) {
+    const motivo: MotivoRechazo = "token invalido";
+    await registrarRechazo({
+      tokenPrefijo: "",
+      motivo,
+      lat: lat ?? null,
+      lng: lng ?? null,
+      accuracy: accuracy ?? null,
+      distanciaM: null,
+      detalle: "La petición no incluye token, sesión ni dispositivo.",
+    });
+    return {
+      ok: false,
+      error: {
+        motivo,
+        mensaje: "Token o sesión requerido",
+      },
+    };
+  }
+
+  const tokenPrefijo = prefijoToken(token ?? sesion ?? dispositivo ?? "");
 
   /* ---------------------------------------------------------------- */
   /* Rate limit por IP y por token                                     */
@@ -390,42 +413,120 @@ export async function procesarChecar(
   const maxRegistro = hhmmAMinutos(horaMax) ?? hhmmAMinutos(HORA_MAX_DEFAULT)!;
 
   /* ---------------------------------------------------------------- */
-  /* Usuario + token                                                   */
+  /* Usuario: por token personal o por sesión de terminal              */
   /* ---------------------------------------------------------------- */
-  const tokenHash = await sha256Hex(token);
+  type UsuarioChecada = {
+    id: string;
+    nombre: string;
+    correo: string;
+    area: string;
+    activo: boolean;
+  };
 
-  const { data: usuarios } = await supabaseAdmin
-    .from("usuarios")
-    .select("id, nombre, correo, area, activo, token_hash, token_prefijo")
-    .eq("token_hash", tokenHash)
-    .limit(1);
+  let usuario: UsuarioChecada | undefined;
 
-  const usuario = usuarios?.[0];
+  // Prioridad de credenciales: token personal > sesión temporal > dispositivo.
+  // El dispositivo solo se usa si no vino ninguna de las otras dos.
+
+  if (token) {
+    const tokenHash = await sha256Hex(token);
+
+    const { data: usuarios } = await supabaseAdmin
+      .from("usuarios")
+      .select("id, nombre, correo, area, activo, token_hash, token_prefijo")
+      .eq("token_hash", tokenHash)
+      .limit(1);
+
+    usuario = usuarios?.[0];
+  } else if (sesion) {
+    // Terminal compartida: la persona se identificó con correo o nombre y
+    // el backend le firmó una sesión de vida corta.
+    const usuarioId = await verificarSesion(sesion);
+
+    if (!usuarioId) {
+      await registrarRechazo({
+        usuarioId: null,
+        tokenPrefijo,
+        motivo: "token invalido",
+        lat: lat ?? null,
+        lng: lng ?? null,
+        accuracy: accuracy ?? null,
+        distanciaM: null,
+        detalle: "Sesión expirada o con firma inválida.",
+      });
+      return {
+        ok: false,
+        error: {
+          motivo: "token invalido",
+          mensaje: "Tu sesión expiró. Identifícate de nuevo.",
+          tokenPrefijo,
+        },
+      };
+    }
+
+    const { data: porSesion } = await supabaseAdmin
+      .from("usuarios")
+      .select("id, nombre, correo, area, activo")
+      .eq("id", usuarioId)
+      .limit(1);
+
+    usuario = porSesion?.[0];
+  } else if (dispositivo) {
+    // Terminal compartida, segundo paso: el dispositivo ya está vinculado a
+    // una persona. Se le reconoce sin volver a pedir la identidad.
+    const { data: vinculos } = await supabaseAdmin
+      .from("dispositivos")
+      .select("usuario_id, activo")
+      .eq("huella", dispositivo)
+      .eq("activo", true)
+      .limit(1);
+
+    const vinculo = vinculos?.[0];
+
+    if (vinculo) {
+      const { data: porDispositivo } = await supabaseAdmin
+        .from("usuarios")
+        .select("id, nombre, correo, area, activo")
+        .eq("id", vinculo.usuario_id)
+        .limit(1);
+      usuario = porDispositivo?.[0];
+    }
+  }
 
   if (!usuario) {
+    const esDispositivo = !token && !sesion && Boolean(dispositivo);
+
     await registrarRechazo({
       usuarioId: null,
       tokenPrefijo,
       motivo: "token invalido",
-      lat: null,
-      lng: null,
-      accuracy: null,
+      lat: lat ?? null,
+      lng: lng ?? null,
+      accuracy: accuracy ?? null,
       distanciaM: null,
-      detalle: `Token no reconocido. Prefijo: ${tokenPrefijo}`,
+      detalle: esDispositivo
+        ? "Dispositivo no vinculado a ninguna persona."
+        : `Token o sesión no reconocidos. Prefijo: ${tokenPrefijo}`,
     });
-    await enviarAvisoAdmin(
-      `token-invalido:${tokenPrefijo}`,
-      "Rechazo: token inválido en checada pública",
-      `Se intentó una checada con un token no válido o usuario inactivo.\n\n` +
-        `Prefijo del token: ${tokenPrefijo}\n` +
-        `IP: ${ip}\n` +
-        `Fecha/hora: ${fechaLocal(ahoraMx())} ${formatoHM(ahoraMx())}\n`
-    );
+
+    if (!esDispositivo) {
+      await enviarAvisoAdmin(
+        `token-invalido:${tokenPrefijo}`,
+        "Rechazo: token inválido en checada pública",
+        `Se intentó una checada con un token no válido o usuario inactivo.\n\n` +
+          `Prefijo del token: ${tokenPrefijo}\n` +
+          `IP: ${ip}\n` +
+          `Fecha/hora: ${fechaLocal(ahoraMx())} ${formatoHM(ahoraMx())}\n`
+      );
+    }
+
     return {
       ok: false,
       error: {
         motivo: "token invalido",
-        mensaje: "Token inválido o usuario inactivo",
+        mensaje: esDispositivo
+          ? "Este dispositivo aún no está registrado. Identifícate para registrar tu asistencia."
+          : "Token inválido o usuario inactivo",
         tokenPrefijo,
       },
     };
@@ -705,6 +806,8 @@ export async function procesarChecar(
       p_origen: ORIGEN_PUBLICO,
       p_ip: ip,
       p_user_agent: userAgent,
+      p_huella: dispositivo ?? null,
+      p_agente: etiqueta ?? null,
     }
   );
 

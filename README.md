@@ -67,6 +67,52 @@ Solo lectura. Devuelve el nombre, el área y la última marca del día. **Nunca 
 { "valido": true, "nombre": "Jesus Guadarrama", "area": "Oficina", "ultimaMarca": "09:14", "tipoUltimaMarca": "ENTRADA" }
 ```
 
+### `POST /api/identificar`
+
+Terminal compartida: valida **correo** (o **nombre**, como respaldo) contra la
+tabla `usuarios` y devuelve una **sesión de vida corta (5 min)** que autoriza
+una sola checada.
+
+```jsonc
+// Request
+{ "correo": "jesus.guadarrama@gmail.com" }
+// o { "nombre": "Jesus Guadarrama" }
+// o { "id": "<uuid>" }   // cuando hay varias coincidencias
+
+// Response
+{ "ok": true, "sesion": "eyJ1aWQiOi....", "usuario": { "id": "...", "nombre": "...", "area": "Oficina" } }
+```
+
+Si hay varias personas con el mismo nombre devuelve `candidatos` para que el
+cliente elija.
+
+### `GET /api/dispositivo?huella=<id>`
+
+Consulta si un dispositivo ya está asignado a alguien. Solo lectura.
+
+```json
+{ "encontrado": true, "nombre": "Jesus Guadarrama", "area": "Oficina", "veces": 12, "ultimaMarca": "..." }
+```
+
+---
+
+## Las tres formas de credencial
+
+`POST /api/checar` acepta cualquiera de las tres, con esta prioridad:
+
+| Prioridad | Campo | Cuándo se usa |
+|---|---|---|
+| 1 | `token` | Credencial personal: la etiqueta NFC/QR de cada persona. |
+| 2 | `sesion` | Terminal compartida: ya se identificó con correo o nombre. |
+| 3 | `dispositivo` | Terminal compartida: el teléfono ya quedó vinculado. Se checa sin volver a identificarse. |
+
+Todas siguen las mismas validaciones. Una vez identificada, el dispositivo
+queda registrado en la tabla `dispositivos` (vínculo dispositivo ↔ persona). El
+panel de administración puede verlos y revocarlos.
+
+Además, cada checada registra el `dispositivo_id` en la marca, para poder
+analizar qué equipo usó cada collaborator.
+
 ---
 
 ## Puesta en marcha
@@ -117,9 +163,11 @@ npm run migraciones:reset       # borra y vuelve a aplicar (pide confirmación)
 *Supabase → SQL Editor → New query*:
 
 ```
-supabase/migrations/0001_init.sql      -- tablas, índices, RLS
-supabase/migrations/0002_funciones.sql -- registrar_marca() + vista v_estado_dia
-supabase/migrations/0003_seed.sql      -- sedes, config, usuarios y admins iniciales
+supabase/migrations/0001_init.sql         -- tablas, índices, RLS
+supabase/migrations/0002_funciones.sql    -- registrar_marca() + vista v_estado_dia
+supabase/migrations/0003_seed.sql         -- sedes, config, usuarios y admins iniciales
+supabase/migrations/0004_avisos_admin.sql -- deduplicación persistente de avisos
+supabase/migrations/0005_dispositivos.sql -- vínculo dispositivo ↔ persona
 ```
 
 > Ajusta las coordenadas de `sedes` en `0003_seed.sql` a la dirección real de la oficina.

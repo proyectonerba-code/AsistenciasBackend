@@ -8,9 +8,11 @@
 -- ------------------------------------------------------------
 -- Sedes (geocercas). Ajusta coordenadas y radio a tu oficina real.
 -- El WHERE NOT EXISTS lo hace idempotente: se puede re-aplicar sin duplicar.
+--
+-- Oficina Central: 20°04'22.5"N 98°23'07.0"W  ->  20.0729167, -98.3852778
 -- ------------------------------------------------------------
 INSERT INTO sedes (nombre, lat, lng, radio_m, activa)
-SELECT 'Oficina Central', 19.432608, -99.133209, 100, true
+SELECT 'Oficina Central', 20.0729167, -98.3852778, 150, true
 WHERE NOT EXISTS (
   SELECT 1 FROM sedes WHERE nombre = 'Oficina Central'
 );

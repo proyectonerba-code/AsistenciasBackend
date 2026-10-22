@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 /**
  * Aplica las migraciones del Control de Asistencia en un proyecto de Supabase.
  *
@@ -184,9 +184,9 @@ const CONSULTAS_VERIFICACION = [
           WHERE table_schema = 'public'
             AND table_name IN ('usuarios','sedes','marcas','ajustes_manuales',
                                'horarios_especiales','faltas','rechazados','bitacora',
-                               'admins','config','avisos_admin')
+                               'admins','config','avisos_admin','dispositivos')
           ORDER BY table_name;`,
-    esperado: 11,
+    esperado: 12,
   },
   {
     nombre: "Función registrar_marca",
@@ -248,12 +248,12 @@ async function verificar() {
        WHERE schemaname = 'public' AND rowsecurity = true
          AND tablename IN ('usuarios','sedes','marcas','ajustes_manuales',
                            'horarios_especiales','faltas','rechazados','bitacora',
-                           'admins','config','avisos_admin');`
+                           'admins','config','avisos_admin','dispositivos');`
     );
     const n = filas?.[0]?.n ?? 0;
-    const bien = n === 11;
+    const bien = n === 12;
     ok = ok && bien;
-    log(`${bien ? "✔" : "✖"} RLS activo en las 11 tablas: ${n}`);
+    log(`${bien ? "✔" : "✖"} RLS activo en las 12 tablas: ${n}`);
   } catch (err) {
     log(`✖ RLS: ${err.message}`);
   }
@@ -294,6 +294,7 @@ async function main() {
     const tablas = [
       "bitacora",
       "avisos_admin",
+      "dispositivos",
       "rechazados",
       "faltas",
       "horarios_especiales",
