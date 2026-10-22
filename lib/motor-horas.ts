@@ -10,11 +10,13 @@
  *
  * Reglas heredadas del control de asistencia original:
  *  - Semana laboral: lunes a sábado. El domingo NO es laboral.
- *  - El sábado no descuenta hora de comida.
+ *  - El sábado no descuenta hora de comida, salvo que el colaborador tenga
+ *    un receso configurado (minutosComidaSabado).
  *  - La comida solo se descuenta si la jornada bruta es >= 300 min.
  *  - Las horas extra del sábado se trasladan a la semana siguiente.
  *  - El domingo es solo una incidencia: no suma horas ni extras.
  *  - Nunca se cierra automáticamente una entrada de otro día.
+ *  - Cada colaborador puede tener su propia jornada, que pisa a la del área.
  */
 import {
   hhmmAMinutos,
@@ -51,7 +53,7 @@ export interface HorarioReferencia {
   /** Texto listo para mostrar: "09:00 - 19:00". */
   etiqueta: string;
   /** Motivo por el que se aplicó este horario. */
-  origen: "horario especial" | "sábado" | "área";
+  origen: "horario especial" | "sábado" | "área" | "colaborador";
   /** El día es de descanso: no se contabilizan horas aunque haya marcas. */
   descanso: boolean;
 }
@@ -67,6 +69,23 @@ export interface HorarioArea {
   inicio: string;
   fin: string;
   sabado?: { inicio: string; fin: string } | null;
+}
+
+/**
+ * Jornada propia de un colaborador.
+ *
+ * Los campos en `null` heredan del área (o de la config global del sábado),
+ * así que un colaborador sin jornada propia se comporta exactamente igual
+ * que antes de existir este concepto.
+ */
+export interface JornadaUsuario {
+  /** Lunes a viernes. "09:00" o null = hereda del área. */
+  jornadaInicio: string | null;
+  jornadaFin: string | null;
+  /** null = hereda del área; true = trabaja; false = descanso. */
+  sabadoTrabaja: boolean | null;
+  sabadoInicio: string | null;
+  sabadoFin: string | null;
 }
 
 export interface ReglaHorarioEspecial {
@@ -122,6 +141,12 @@ export interface ParametrosDia {
   marcas: MarcaCruda[];
   ajusteManual: AjusteManual | null;
   minutosComida: number;
+  /**
+   * Minutos de receso el sábado. Por defecto 0: el sábado no descuenta
+   * hora de comida (regla original del control de asistencia). Un
+   * colaborador puede configurarlo desde el panel.
+   */
+  minutosComidaSabado?: number;
   horarioReferencia: HorarioReferencia;
   minEntreMarcas?: number; // default 5
   minutosMinimosComida?: number; // default 300
@@ -408,14 +433,21 @@ export function calcularDia(p: ParametrosDia): ResultadoDia {
   // ------------------------------------------------------------
   const brutas = s !== null ? Math.max(0, s - e) : 0;
 
-  // El sábado nunca descuenta comida.
-  const aplicaComida = !esSabado && brutas >= minutosMinimosComida;
-  const comida = aplicaComida ? Math.min(p.minutosComida, brutas) : 0;
+  // El receso del sábado es 0 por defecto (regla original). Si el
+  // colaborador tiene receso configurado, se descuenta igual que de
+  // lunes a viernes.
+  const minutosComidaDia = esSabado
+    ? (p.minutosComidaSabado ?? 0)
+    : p.minutosComida;
+
+  const aplicaComida =
+    minutosComidaDia > 0 && brutas >= minutosMinimosComida;
+  const comida = aplicaComida ? Math.min(minutosComidaDia, brutas) : 0;
   const netas = Math.max(0, brutas - comida);
 
   const jornadaBruta = Math.max(0, jornada.fin - jornada.inicio);
   const comidaJornada = aplicaComida
-    ? Math.min(p.minutosComida, jornadaBruta)
+    ? Math.min(minutosComidaDia, jornadaBruta)
     : 0;
   const jornadaNeta = Math.max(0, jornadaBruta - comidaJornada);
   const extra = Math.max(0, netas - jornadaNeta);
@@ -490,7 +522,12 @@ export function calcularDia(p: ParametrosDia): ResultadoDia {
   }
 
   if (observaciones === "" && esSabado) {
-    observaciones = "Sábado: jornada de " + jornada.etiqueta + ". No se descuenta hora de comida.";
+    observaciones =
+      "Sábado: jornada de " +
+      jornada.etiqueta +
+      (aplicaComida
+        ? `. Se descuenta ${comida} min de receso.`
+        : ". No se descuenta hora de comida.");
   }
 
   const diaSemana = diaSemanaNumericoMx(fecha);
@@ -526,12 +563,15 @@ export function calcularDia(p: ParametrosDia): ResultadoDia {
 /**
  * Resuelve el horario de referencia para una fecha.
  * Prioridad: 1) horario especial vigente, 2) sábado (descanso o jornada),
- * 3) horario del área.
+ * 3) jornada propia del colaborador, 4) horario del área.
  *
  * El sábado puede configurarse por área con la clave `sabado`:
  *   - `null`      -> descanso (no se contabilizan horas).
  *   - `{inicio,fin}` -> jornada propia del área para el sábado.
  *   - ausente     -> se usa el horario general de sábados.
+ *
+ * La jornada propia del colaborador (`jornadaUsuario`) tiene prioridad
+ * sobre el área: un null en un campo significa "hereda", no "vacío".
  */
 export function resolverHorarioReferencia(params: {
   area: "Oficina" | "Técnico" | "Sin asignar";
@@ -539,12 +579,36 @@ export function resolverHorarioReferencia(params: {
   horarioEspecial: HorarioReferencia | null;
   horariosPorArea: Record<string, HorarioArea>;
   horarioSabado: { inicio: string; fin: string };
+  jornadaUsuario?: JornadaUsuario | null;
 }): HorarioReferencia {
   if (params.horarioEspecial) {
     return params.horarioEspecial;
   }
 
+  const j = params.jornadaUsuario ?? null;
+
   if (esSabadoMx(params.fecha)) {
+    // 1) El propio colaborador decide si trabaja los sábados.
+    if (j?.sabadoTrabaja === false) {
+      return {
+        inicio: 0,
+        fin: 0,
+        etiqueta: "Descanso",
+        origen: "sábado",
+        descanso: true,
+      };
+    }
+    if (j?.sabadoTrabaja === true && j.sabadoInicio && j.sabadoFin) {
+      return {
+        inicio: hhmmAMinutos(j.sabadoInicio) ?? 0,
+        fin: hhmmAMinutos(j.sabadoFin) ?? 0,
+        etiqueta: `${j.sabadoInicio} - ${j.sabadoFin}`,
+        origen: "colaborador",
+        descanso: false,
+      };
+    }
+
+    // 2) El área.
     const area = params.horariosPorArea[params.area];
     const propio = area ? area.sabado : undefined;
 
@@ -568,6 +632,7 @@ export function resolverHorarioReferencia(params: {
       };
     }
 
+    // 3) El horario general de sábados.
     const inicio = hhmmAMinutos(params.horarioSabado.inicio) ?? 0;
     const fin = hhmmAMinutos(params.horarioSabado.fin) ?? 0;
     return {
@@ -585,11 +650,16 @@ export function resolverHorarioReferencia(params: {
       inicio: "09:00",
       fin: "19:00",
     };
+
+  // La jornada propia del colaborador pisa al horario del área.
+  const inicioTexto = j?.jornadaInicio ?? h.inicio;
+  const finTexto = j?.jornadaFin ?? h.fin;
+
   return {
-    inicio: hhmmAMinutos(h.inicio) ?? 0,
-    fin: hhmmAMinutos(h.fin) ?? 0,
-    etiqueta: `${h.inicio} - ${h.fin}`,
-    origen: "área",
+    inicio: hhmmAMinutos(inicioTexto) ?? 0,
+    fin: hhmmAMinutos(finTexto) ?? 0,
+    etiqueta: `${inicioTexto} - ${finTexto}`,
+    origen: j?.jornadaInicio || j?.jornadaFin ? "colaborador" : "área",
     descanso: false,
   };
 }

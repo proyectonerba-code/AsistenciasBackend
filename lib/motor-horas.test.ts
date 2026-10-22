@@ -655,3 +655,172 @@ describe("motor — semana", () => {
     expect(s.asistencias).toBe(1);
   });
 });
+
+describe("jornada propia del colaborador", () => {
+  const LUNES = mx(2026, 6, 8, 12, 0);
+  const SABADO = mx(2026, 6, 13, 12, 0);
+
+  const HORARIOS_AREA = {
+    Oficina: { inicio: "09:00", fin: "19:00" },
+    Técnico: { inicio: "09:00", fin: "20:00" },
+    "Sin asignar": { inicio: "09:00", fin: "19:00" },
+  };
+
+  it("sin jornada propia, manda el horario del área", () => {
+    const h = resolverHorarioReferencia({
+      area: "Oficina",
+      fecha: LUNES,
+      horarioEspecial: null,
+      horariosPorArea: HORARIOS_AREA,
+      horarioSabado: { inicio: "09:00", fin: "15:00" },
+    });
+    expect(h.inicio).toBe(540);
+    expect(h.fin).toBe(1140);
+    expect(h.origen).toBe("área");
+  });
+
+  it("la jornada propia del colaborador pisa al horario del área", () => {
+    const h = resolverHorarioReferencia({
+      area: "Oficina",
+      fecha: LUNES,
+      horarioEspecial: null,
+      horariosPorArea: HORARIOS_AREA,
+      horarioSabado: { inicio: "09:00", fin: "15:00" },
+      jornadaUsuario: {
+        jornadaInicio: "08:00",
+        jornadaFin: "17:00",
+        sabadoTrabaja: null,
+        sabadoInicio: null,
+        sabadoFin: null,
+      },
+    });
+    expect(h.inicio).toBe(480);
+    expect(h.fin).toBe(1020);
+    expect(h.etiqueta).toBe("08:00 - 17:00");
+    expect(h.origen).toBe("colaborador");
+  });
+
+  it("un null en la jornada propia significa heredar, no vaciar", () => {
+    const h = resolverHorarioReferencia({
+      area: "Oficina",
+      fecha: LUNES,
+      horarioEspecial: null,
+      horariosPorArea: HORARIOS_AREA,
+      horarioSabado: { inicio: "09:00", fin: "15:00" },
+      jornadaUsuario: {
+        jornadaInicio: "08:00",
+        jornadaFin: null,
+        sabadoTrabaja: null,
+        sabadoInicio: null,
+        sabadoFin: null,
+      },
+    });
+    expect(h.inicio).toBe(480);
+    expect(h.fin).toBe(1140);
+  });
+
+  it("el colaborador puede marcar el sábado como descanso", () => {
+    const h = resolverHorarioReferencia({
+      area: "Oficina",
+      fecha: SABADO,
+      horarioEspecial: null,
+      horariosPorArea: HORARIOS_AREA,
+      horarioSabado: { inicio: "09:00", fin: "15:00" },
+      jornadaUsuario: {
+        jornadaInicio: null,
+        jornadaFin: null,
+        sabadoTrabaja: false,
+        sabadoInicio: null,
+        sabadoFin: null,
+      },
+    });
+    expect(h.descanso).toBe(true);
+    expect(h.etiqueta).toBe("Descanso");
+  });
+
+  it("el colaborador puede definir su propia jornada del sábado", () => {
+    const h = resolverHorarioReferencia({
+      area: "Oficina",
+      fecha: SABADO,
+      horarioEspecial: null,
+      horariosPorArea: HORARIOS_AREA,
+      horarioSabado: { inicio: "09:00", fin: "15:00" },
+      jornadaUsuario: {
+        jornadaInicio: null,
+        jornadaFin: null,
+        sabadoTrabaja: true,
+        sabadoInicio: "09:00",
+        sabadoFin: "13:00",
+      },
+    });
+    expect(h.descanso).toBe(false);
+    expect(h.inicio).toBe(540);
+    expect(h.fin).toBe(780);
+    expect(h.origen).toBe("colaborador");
+  });
+
+  it("el horario especial sigue mandando sobre la jornada propia", () => {
+    const h = resolverHorarioReferencia({
+      area: "Oficina",
+      fecha: LUNES,
+      horarioEspecial: {
+        inicio: 600,
+        fin: 1080,
+        etiqueta: "10:00 - 18:00",
+        origen: "horario especial",
+        descanso: false,
+      },
+      horariosPorArea: HORARIOS_AREA,
+      horarioSabado: { inicio: "09:00", fin: "15:00" },
+      jornadaUsuario: {
+        jornadaInicio: "08:00",
+        jornadaFin: "17:00",
+        sabadoTrabaja: null,
+        sabadoInicio: null,
+        sabadoFin: null,
+      },
+    });
+    expect(h.inicio).toBe(600);
+    expect(h.fin).toBe(1080);
+  });
+
+  it("el sábado no descuenta comida si el colaborador no tiene receso", () => {
+    const r = calcularDia({
+      fecha: SABADO,
+      marcas: [marca(9, 0, 13), marca(17, 0, 13)],
+      ajusteManual: null,
+      minutosComida: 60,
+      minutosComidaSabado: 0,
+      horarioReferencia: {
+        inicio: 540,
+        fin: 900,
+        etiqueta: "09:00 - 15:00",
+        origen: "sábado",
+        descanso: false,
+      },
+    });
+    expect(r.brutas).toBe(480);
+    expect(r.comida).toBe(0);
+    expect(r.netas).toBe(480);
+  });
+
+  it("el receso del sábado se descuenta si el colaborador lo tiene", () => {
+    const r = calcularDia({
+      fecha: SABADO,
+      marcas: [marca(9, 0, 13), marca(17, 0, 13)],
+      ajusteManual: null,
+      minutosComida: 60,
+      minutosComidaSabado: 30,
+      horarioReferencia: {
+        inicio: 540,
+        fin: 900,
+        etiqueta: "09:00 - 15:00",
+        origen: "sábado",
+        descanso: false,
+      },
+    });
+    expect(r.brutas).toBe(480);
+    expect(r.comida).toBe(30);
+    expect(r.netas).toBe(450);
+  });
+});
