@@ -1,4 +1,4 @@
-/**
+﻿/**
  * GET /api/checar/info?token=<token>
  *
  * SOLO LECTURA: devuelve el nombre de la persona y su última marca del día
@@ -13,8 +13,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Preflight CORS. */
-export async function OPTIONS(): Promise<NextResponse> {
-  return new NextResponse(null, { status: 204, headers: cabecerasCors() });
+export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
+  return new NextResponse(null, { status: 204, headers: cabecerasCors(request.headers.get("origin")) });
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -23,10 +23,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!token || !esTokenValido(token)) {
     return NextResponse.json(
       { valido: false },
-      { status: 400, headers: cabecerasCors() }
+      { status: 400, headers: cabecerasCors(request.headers.get("origin")) }
     );
   }
 
   const info = await obtenerInfoPublica(token);
-  return NextResponse.json(info, { headers: cabecerasCors() });
+  return NextResponse.json(info, { headers: cabecerasCors(request.headers.get("origin")) });
 }

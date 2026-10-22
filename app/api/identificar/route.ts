@@ -1,4 +1,4 @@
-/**
+﻿/**
  * POST /api/identificar
  *
  * Terminal compartida: valida correo (o nombre) contra la tabla `usuarios`
@@ -14,8 +14,8 @@ import { cabecerasCors } from "@/lib/cors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function OPTIONS(): Promise<NextResponse> {
-  return new NextResponse(null, { status: 204, headers: cabecerasCors() });
+export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
+  return new NextResponse(null, { status: 204, headers: cabecerasCors(request.headers.get("origin")) });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           mensaje: "Demasiados intentos. Espera un minuto e inténtalo de nuevo.",
         },
       },
-      { status: 429, headers: cabecerasCors() }
+      { status: 429, headers: cabecerasCors(request.headers.get("origin")) }
     );
   }
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         ok: false,
         error: { motivo: "invalido", mensaje: "Cuerpo de la petición inválido" },
       },
-      { status: 400, headers: cabecerasCors() }
+      { status: 400, headers: cabecerasCors(request.headers.get("origin")) }
     );
   }
 
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!resultado.ok) {
     return NextResponse.json(
       { ok: false, error: resultado.error },
-      { status: resultado.error.motivo === "varios" ? 300 : 404, headers: cabecerasCors() }
+      { status: resultado.error.motivo === "varios" ? 300 : 404, headers: cabecerasCors(request.headers.get("origin")) }
     );
   }
 
@@ -67,6 +67,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       sesion: resultado.data.sesion,
       usuario: resultado.data.usuario,
     },
-    { headers: cabecerasCors() }
+    { headers: cabecerasCors(request.headers.get("origin")) }
   );
 }

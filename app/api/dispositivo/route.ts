@@ -1,4 +1,4 @@
-/**
+﻿/**
  * GET /api/dispositivo?huella=<id>
  *
  * Consulta si un dispositivo (celular/tablet) ya está asignado a alguien.
@@ -15,8 +15,8 @@ import { cabecerasCors } from "@/lib/cors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function OPTIONS(): Promise<NextResponse> {
-  return new NextResponse(null, { status: 204, headers: cabecerasCors() });
+export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
+  return new NextResponse(null, { status: 204, headers: cabecerasCors(request.headers.get("origin")) });
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!huella || !/^[A-Za-z0-9_-]{8,64}$/.test(huella)) {
     return NextResponse.json(
       { encontrado: false },
-      { status: 400, headers: cabecerasCors() }
+      { status: 400, headers: cabecerasCors(request.headers.get("origin")) }
     );
   }
 
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .eq("huella", huella);
     return NextResponse.json(
       { encontrado: false, olvidado: true },
-      { headers: cabecerasCors() }
+      { headers: cabecerasCors(request.headers.get("origin")) }
     );
   }
 
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!vinculo) {
     return NextResponse.json(
       { encontrado: false },
-      { headers: cabecerasCors() }
+      { headers: cabecerasCors(request.headers.get("origin")) }
     );
   }
 
@@ -76,6 +76,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       veces: vinculo.veces ?? 0,
       ultimaMarca: vinculo.ultima_marca ?? null,
     },
-    { headers: cabecerasCors() }
+    { headers: cabecerasCors(request.headers.get("origin")) }
   );
 }

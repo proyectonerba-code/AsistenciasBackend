@@ -1,22 +1,13 @@
 /**
  * Backend del Control de Asistencia (API + Supabase).
+ *
+ * El CORS se resuelve por ruta (ver lib/cors.ts) porque el origen puede
+ * cambiar en cada vista previa de Netlify; las cabeceras estáticas de
+ * next.config lo pisarían.
  */
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  async headers() {
-    return [
-      {
-        source: "/api/:path*",
-        headers: [
-          { key: "Access-Control-Allow-Origin", value: process.env.ALLOWED_ORIGIN || "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS" },
-          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
-          { key: "Access-Control-Max-Age", value: "86400" },
-        ],
-      },
-    ];
-  },
 };
 
 export default nextConfig;

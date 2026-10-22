@@ -1,4 +1,4 @@
-/**
+﻿/**
  * POST /api/checar — Registro de checada pública (NFC/QR).
  *
  * NUNCA se registra con GET. Solo el servidor (service role) escribe.
@@ -18,8 +18,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Preflight CORS. */
-export async function OPTIONS(): Promise<NextResponse> {
-  return new NextResponse(null, { status: 204, headers: cabecerasCors() });
+export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
+  return new NextResponse(null, { status: 204, headers: cabecerasCors(request.headers.get("origin")) });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           mensaje: "Cuerpo de la petición inválido",
         },
       },
-      { status: 400, headers: cabecerasCors() }
+      { status: 400, headers: cabecerasCors(request.headers.get("origin")) }
     );
   }
 
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           mensaje: "Token, sesión o dispositivo requerido",
         },
       },
-      { status: 400, headers: cabecerasCors() }
+      { status: 400, headers: cabecerasCors(request.headers.get("origin")) }
     );
   }
 
@@ -94,12 +94,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         distanciaM: resultado.data.distanciaM,
         aviso: resultado.data.aviso,
       },
-      { headers: cabecerasCors() }
+      { headers: cabecerasCors(request.headers.get("origin")) }
     );
   }
 
   return NextResponse.json(
     { ok: false, error: resultado.error },
-    { status: 400, headers: cabecerasCors() }
+    { status: 400, headers: cabecerasCors(request.headers.get("origin")) }
   );
 }

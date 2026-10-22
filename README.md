@@ -134,7 +134,8 @@ cp .env.example .env.local
 | `SUPABASE_URL` | URL del proyecto de Supabase. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Llave de service role (**solo servidor**). |
 | `SUPABASE_DEMO` | `1` activa el modo demostración (Supabase simulado en memoria). |
-| `ALLOWED_ORIGIN` | Origen permitido de la vista de registro (CORS). |
+| `ALLOWED_ORIGIN` | Orígenes permitidos (CORS), separados por coma. Admite comodines: `https://*.netlify.app`. |
+| `SESSION_SECRET` | Secreto para firmar las sesiones de terminal (5 min). |
 | `ADMIN_ALERT_EMAIL` | Destino de los avisos de rechazo. |
 | `EMAIL_PROVIDER` | `console` (log) o `resend` (correo real). |
 | `CRON_SECRET` | Secreto para las tareas programadas. |
