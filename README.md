@@ -230,11 +230,20 @@ supabase/migrations/     Migraciones SQL
 
 ---
 
-## Despliegue (Vercel)
+## Despliegue (Netlify, Vercel o cualquier host de Node)
 
 ```bash
+# Netlify
+npx netlify deploy --prod
+
+# Vercel
 vercel --prod
+
+# Railway / Render / Fly: build = npm run build, start = npm start
 ```
 
-Variables de entorno en el panel de Vercel: `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY`, `ALLOWED_ORIGIN`, `ADMIN_ALERT_EMAIL`.
+Variables de entorno: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+`SUPABASE_DEMO=0`, `SESSION_SECRET`, `ALLOWED_ORIGIN`, `ADMIN_ALERT_EMAIL`.
+
+La guía completa (los 3 repos, orden de despliegue y lista de verificación)
+está en `GUIA-DESPLIEGUE.md`.

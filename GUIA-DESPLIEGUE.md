@@ -1,36 +1,46 @@
 # Guía de despliegue · Control de Asistencia NerWork
 
-Tres aplicaciones, tres repositorios. Para probarlas en internet:
+Tres aplicaciones, tres repositorios. **Todo puedes subirlo a Netlify** (o a
+cualquier hosting de Node).
 
 | App | Repo | Dónde |
 |---|---|---|
-| **Backend** (API) | `AsistenciasBackend` | Vercel (recomendado) |
-| **Vista de registro** (NFC/QR) | `AsistenciasVistaRegistro` | Netlify o Vercel |
-| **Panel de administración** | `AsistenciasVistaAdministrador` | Netlify o Vercel |
+| **Backend** (API) | `AsistenciasBackend` | Netlify |
+| **Vista de registro** (NFC/QR) | `AsistenciasVistaRegistro` | Netlify |
+| **Panel de administración** | `AsistenciasVistaAdministrador` | Netlify |
 
 > ⚠️ **El backend va primero.** Las vistas necesitan su URL para poder
 > registrar checadas. Despliégalo, toma su URL y luego despliega las vistas.
 
+> Nada de esto **requiere Vercel**. Vercel, Railway, Render, Fly.io o un
+> VPS sirven igual: lo único que importa es que el backend corra Node 20 y
+> tenga estas variables. Netlify se recomienda aquí solo por tener las tres
+> apps en la misma cuenta.
+
 ---
 
-## 1. Backend → Vercel
+## 1. Backend → Netlify
 
 ```bash
 cd AsistenciasBackend
-npx vercel --prod
+npx netlify init      # o "Add new site" desde la web
+npx netlify deploy --prod
 ```
 
-Variables de entorno (en Vercel: *Settings → Environment Variables*):
+Variables de entorno (Netlify: *Site settings → Environment variables*):
 
 | Variable | Valor |
 |---|---|
 | `SUPABASE_URL` | `https://mkpknuszfxivtfqdexii.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | la llave `service_role` de tu proyecto |
 | `SUPABASE_DEMO` | `0` |
-| `SESSION_SECRET` | una cadena larga y aleatoria (para firmar las sesiones) |
+| `SESSION_SECRET` | una cadena larga y aleatoria |
 | `ALLOWED_ORIGIN` | ver más abajo |
 | `ADMIN_ALERT_EMAIL` | `marionly420@gmail.com` |
 | `EMAIL_PROVIDER` | `console` (o `resend` si quieres correos reales) |
+
+> Genera un `SESSION_SECRET` con:
+> `node -e "console.log(require('crypto').randomUUID())"`
 
 ### `ALLOWED_ORIGIN` acepta varios orígenes
 
@@ -38,8 +48,20 @@ Sepáralos por coma. Admite comodines de dominio, útiles porque **Netlify
 genera una URL distinta en cada vista previa**:
 
 ```
-https://registro.nerwork.mx,https://*.netlify.app,http://localhost:3000
+https://tu-registro.netlify.app,https://*.netlify.app,http://localhost:3000
 ```
+
+### Si prefieres Vercel (o cualquier otro host)
+
+También funciona: es una app Next.js normal.
+
+```bash
+cd AsistenciasBackend
+npx vercel --prod        # Vercel
+# Railway / Render / Fly: "New service" desde el repo, build = npm run build, start = npm start
+```
+
+Las variables de entorno son exactamente las mismas.
 
 ---
 
@@ -47,15 +69,15 @@ https://registro.nerwork.mx,https://*.netlify.app,http://localhost:3000
 
 ```bash
 cd AsistenciasVistaRegistro
-npx netlify init      # o "Add new site" desde la web
+npx netlify init
 npx netlify deploy --prod
 ```
 
-Variables (en Netlify: *Site settings → Environment variables*):
+Variables:
 
 | Variable | Valor |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | `https://tu-backend.vercel.app` |
+| `NEXT_PUBLIC_API_URL` | `https://tu-backend.netlify.app` |
 | `NEXT_PUBLIC_REGISTRO_URL` | `https://tu-registro.netlify.app` |
 
 > 🔴 **`NEXT_PUBLIC_*` se incrustan en el BUILD.** Si las defines después del
@@ -131,3 +153,7 @@ agregado en Supabase → *Authentication → URL Configuration → Site URL*.
 
 **Sale "Application error" en una página del panel**
 → Falta `SUPABASE_SERVICE_ROLE_KEY` en el servidor del panel.
+
+**La API tarda o se corta (Netlify)**
+→ Las funciones tienen un tiempo máximo (10 s gratis / 26 s Pro). Las nuestras
+responden en milisegundos; si vieras cortes, revisa la latencia a Supabase.

@@ -1,0 +1,18 @@
+# Configuración de Netlify para el backend (API de checadas).
+#
+# El backend es una app Next.js con Route Handlers. Netlify las sirve con
+# el plugin oficial, igual que las páginas.
+#
+# Limitación a tener en cuenta: las funciones de Netlify tienen un tiempo
+# máximo de ejecución (10 s en el plan gratuito, 26 s en Pro). Las nuestras
+# responden en milisegundos porque solo hacen llamadas HTTP a Supabase.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
