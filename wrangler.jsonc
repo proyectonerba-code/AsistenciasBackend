@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "asistencias-backend",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-23",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "SUPABASE_URL": "https://mkpknuszfxivtfqdexii.supabase.co",
+    "SUPABASE_DEMO": "0",
+    "ALLOWED_ORIGIN": "https://asistencias-registro.proyectonerba.workers.dev,https://asistencias-panel.proyectonerba.workers.dev,https://asistencias-registro.pages.dev,https://asistencias-panel.pages.dev,http://localhost:3000,http://localhost:4005",
+    "TZ": "America/Mexico_City",
+    "ADMIN_ALERT_EMAIL": "marionly420@gmail.com",
+    "EMAIL_PROVIDER": "console"
+  }
+}
