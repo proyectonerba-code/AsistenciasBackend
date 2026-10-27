@@ -15,9 +15,26 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx opennextjs-cloudflare build
-      - uses: cloudflare/wrangler-action@v3
+      - name: Build OpenNext app
+        run: npx opennextjs-cloudflare build
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          PIN_PEPPER: ${{ secrets.PIN_PEPPER }}
+          RATE_LIMIT_PEPPER: ${{ secrets.RATE_LIMIT_PEPPER }}
+      - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+          secrets: |
+            SUPABASE_SERVICE_ROLE_KEY
+            SESSION_SECRET
+            PIN_PEPPER
+            RATE_LIMIT_PEPPER
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          PIN_PEPPER: ${{ secrets.PIN_PEPPER }}
+          RATE_LIMIT_PEPPER: ${{ secrets.RATE_LIMIT_PEPPER }}

@@ -11,6 +11,14 @@
   "observability": {
     "enabled": true
   },
+  "secrets": {
+    "required": [
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "SESSION_SECRET",
+      "PIN_PEPPER",
+      "RATE_LIMIT_PEPPER"
+    ]
+  },
   "vars": {
     "SUPABASE_URL": "https://mkpknuszfxivtfqdexii.supabase.co",
     "SUPABASE_DEMO": "0",
